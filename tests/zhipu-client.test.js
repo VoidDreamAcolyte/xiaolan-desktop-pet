@@ -19,9 +19,9 @@
  *   1. 请求 endpoint 写死、不接受自定义 URL；
  *   2. 请求头带 Bearer Key、body 里 model / messages / stream 正确；
  *   3. 默认模型 glm-4.7-flash，可被设置覆盖；
- *   4. 超时常量 15 秒 + 真实短超时验证超时路径；
- *   5. **最多重试一次**，且只重试网络 / 超时 / 5xx / 限流类错误；
- *   6. 401 / 400 / 403 不重试，429 / 500 / 网络 / 超时重试一次；
+ *   4. 超时常量 30 秒 + 真实短超时验证超时路径；
+ *   5. **最多重试两次**（带退避），且只重试网络 / 超时 / 5xx / 限流类错误；
+ *   6. 401 / 400 / 403 不重试，429 / 500 / 网络 / 超时最多重试两次；
  *   7. 响应格式异常（非 JSON、结构不对、空内容）→ bad-response；
  *   8. 消息长度边界（单条 1000 字符、历史 6 条、总条数与总字符上限）；
  *   9. **错误信息不泄密**：任何返回值 / 日志里都不含 Key、不含上游响应体。
@@ -46,6 +46,7 @@ const {
   DEFAULT_MODEL,
   DEFAULT_TIMEOUT_MS,
   MAX_RETRIES,
+  RETRY_BACKOFF_MS,
   MAX_MESSAGE_CHARS,
   MAX_HISTORY_ITEMS,
   MAX_MESSAGES,
@@ -240,7 +241,10 @@ function build(script, options) {
     },
     model: opts.model,
     timeoutMs: opts.timeoutMs,
-    maxRetries: opts.maxRetries
+    maxRetries: opts.maxRetries,
+    sleepFn: opts.sleepFn || function () {
+      return Promise.resolve();
+    }
   });
   return { client: client, calls: fake.calls };
 }
@@ -269,8 +273,8 @@ function testPureFunctions() {
     CHAT_ENDPOINT
   );
   check('默认模型是 glm-4.7-flash', DEFAULT_MODEL === 'glm-4.7-flash', DEFAULT_MODEL);
-  check('默认超时是 15 秒', DEFAULT_TIMEOUT_MS === 15000, String(DEFAULT_TIMEOUT_MS));
-  check('最多重试一次', MAX_RETRIES === 1, String(MAX_RETRIES));
+  check('默认超时是 30 秒', DEFAULT_TIMEOUT_MS === 30000, String(DEFAULT_TIMEOUT_MS));
+  check('最多重试两次', MAX_RETRIES === 2, String(MAX_RETRIES));
   check('模块导出了 endpoint 常量供测试与文档引用', clientModule.CHAT_ENDPOINT === CHAT_ENDPOINT);
 
   /* ---- 缺陷修复 A：内置鱼设 system 提示词 + 单次回复上限 60 code point ---- */
@@ -634,7 +638,7 @@ async function testBodyReadTimeout() {
   }
 
   {
-    // body read 超时可重试一次：两次都卡住 -> 共 2 次 fetch，最终 timeout
+    // body read 超时可重试两次：三次都卡住 -> 共 3 次 fetch，最终 timeout
     const fake = createFakeTimers();
     let fetchCount = 0;
     const client = createZhipuClient({
@@ -646,20 +650,23 @@ async function testBodyReadTimeout() {
         return FAKE_KEY;
       },
       timeoutMs: 15000,
-      maxRetries: 1,
-      timers: fake.timers
+      maxRetries: 2,
+      timers: fake.timers,
+      sleepFn: function () {
+        return Promise.resolve();
+      }
     });
 
     const pending = client.chat('你好', {});
-    for (let round = 0; round < 2; round += 1) {
+    for (let round = 0; round < 3; round += 1) {
       await flushMicrotasks();
       fake.fireAll();
     }
     const result = await pending;
 
-    check('缺陷E：body read 超时按策略最多重试一次（共 2 次请求）', fetchCount === 2 && result.attempts === 2, `${fetchCount}/${result.attempts}`);
+    check('缺陷E：body read 超时按策略最多重试两次（共 3 次请求）', fetchCount === 3 && result.attempts === 3, `${fetchCount}/${result.attempts}`);
     check('缺陷E：两次 body read 超时后仍归类 timeout', result.ok === false && result.code === 'timeout', JSON.stringify(result));
-    check('缺陷E：重试后两次的定时器都被清理', fake.pending.size === 0 && fake.cleared.length === 2, `${fake.pending.size}/${fake.cleared.length}`);
+    check('缺陷E：重试后三次的定时器都被清理', fake.pending.size === 0 && fake.cleared.length === 3, `${fake.pending.size}/${fake.cleared.length}`);
   }
 
   {
@@ -757,10 +764,10 @@ async function testTimeout() {
     const outcome = await chatTimed(env, '你好', {});
     check('两次都超时后返回 timeout 错误码', outcome.result.ok === false && outcome.result.code === 'timeout', JSON.stringify(outcome.result));
     check('超时提示是"网有点卡"风格', /网有点卡/.test(outcome.result.message), outcome.result.message);
-    check('超时后重试了一次（共 2 次请求）', env.calls.length === 2, String(env.calls.length));
+    check('超时后重试了两次（共 3 次请求）', env.calls.length === 3, String(env.calls.length));
     check('超时错误信息里不含 Key', !JSON.stringify(outcome.result).includes(FAKE_KEY));
-    check('超时返回 attempts=2', outcome.result.attempts === 2, String(outcome.result.attempts));
-    check('超时总耗时约等于两次超时（不会是 15 秒）', outcome.elapsedMs < 2000, String(outcome.elapsedMs));
+    check('超时返回 attempts=3', outcome.result.attempts === 3, String(outcome.result.attempts));
+    check('超时总耗时约等于三次超时（不会是 30 秒）', outcome.elapsedMs < 2000, String(outcome.elapsedMs));
   }
 
   {
@@ -789,7 +796,7 @@ async function testRetry() {
     const env = build([{ throwName: 'TypeError', throwMessage: 'fetch failed' }]);
     const outcome = await chatTimed(env, '你好', {});
     check('网络错误返回 network 错误码', outcome.result.ok === false && outcome.result.code === 'network', JSON.stringify(outcome.result));
-    check('网络错误重试一次（共 2 次请求）', env.calls.length === 2, String(env.calls.length));
+    check('网络错误重试两次（共 3 次请求）', env.calls.length === 3, String(env.calls.length));
     check('网络错误提示是"网有点卡"风格', /网有点卡/.test(outcome.result.message), outcome.result.message);
     check('网络错误不把底层 error.message 回显', !JSON.stringify(outcome.result).includes('fetch failed'));
     check('网络错误不含 Key', !JSON.stringify(outcome.result).includes(FAKE_KEY));
@@ -799,7 +806,7 @@ async function testRetry() {
     const env = build([{ status: 500, body: { error: { message: 'upstream exploded with secret stuff' } } }]);
     const outcome = await chatTimed(env, '你好', {});
     check('500 返回 server-error', outcome.result.code === 'server-error', JSON.stringify(outcome.result));
-    check('500 重试一次（共 2 次请求）', env.calls.length === 2, String(env.calls.length));
+    check('500 重试两次（共 3 次请求）', env.calls.length === 3, String(env.calls.length));
     check('500 不把上游正文回显', !JSON.stringify(outcome.result).includes('upstream exploded'));
     check(
       '500 两次请求都打到同一个 endpoint',
@@ -814,7 +821,7 @@ async function testRetry() {
     const env = build([{ status: 429, body: 'too many requests' }]);
     const outcome = await chatTimed(env, '你好', {});
     check('429 返回 rate-limited', outcome.result.code === 'rate-limited', JSON.stringify(outcome.result));
-    check('429 重试一次（共 2 次请求）', env.calls.length === 2, String(env.calls.length));
+    check('429 重试两次（共 3 次请求）', env.calls.length === 3, String(env.calls.length));
     check('429 不把上游正文回显', !JSON.stringify(outcome.result).includes('too many requests'));
   }
 
@@ -867,11 +874,11 @@ async function testRetry() {
     const env = build([{ status: 500, body: 'x' }]);
     const outcome = await chatTimed(env, '你好', {});
     check(
-      '连续 500 只重试一次就放弃',
-      env.calls.length === 2 && outcome.result.code === 'server-error',
+      '连续 500 重试两次后放弃',
+      env.calls.length === 3 && outcome.result.code === 'server-error',
       env.calls.length + '/' + outcome.result.code
     );
-    check('放弃时 attempts=2', outcome.result.attempts === 2, String(outcome.result.attempts));
+    check('放弃时 attempts=3', outcome.result.attempts === 3, String(outcome.result.attempts));
   }
 
   {
@@ -1013,6 +1020,32 @@ async function testNoLeak() {
 /* 入口                                                                        */
 /* -------------------------------------------------------------------------- */
 
+
+/* -------------------------------------------------------------------------- */
+/* 6.5 重试退避：失败后按 RETRY_BACKOFF_MS 递增等待                              */
+/* -------------------------------------------------------------------------- */
+
+async function testBackoff() {
+  const waits = [];
+  const env = build(
+    [
+      { status: 429, body: 'x' },
+      { status: 429, body: 'x' },
+      { status: 200, body: { choices: [{ message: { content: '第三次成功' } }] } }
+    ],
+    {
+      sleepFn: function (ms) {
+        waits.push(ms);
+        return Promise.resolve();
+      }
+    }
+  );
+  const outcome = await chatTimed(env, '你好', {});
+  check('退避：两次失败后第三次成功', outcome.result.ok === true && outcome.result.content === '第三次成功', JSON.stringify(outcome.result));
+  check('退避：等待序列是 600/1500', waits.length === 2 && waits[0] === 600 && waits[1] === 1500, JSON.stringify(waits));
+  check('退避：导出的退避表未被改动', RETRY_BACKOFF_MS.length === 2 && RETRY_BACKOFF_MS[0] === 600 && RETRY_BACKOFF_MS[1] === 1500, JSON.stringify(RETRY_BACKOFF_MS));
+}
+
 async function main() {
   console.log('智谱云端对话客户端单元测试（阶段 3）');
 
@@ -1024,6 +1057,7 @@ async function main() {
   await testNoKey();
   await testTimeout();
   await testRetry();
+  await testBackoff();
   await testBadResponses();
   await testNoLeak();
 

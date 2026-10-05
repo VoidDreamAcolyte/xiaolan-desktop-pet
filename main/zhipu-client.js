@@ -11,8 +11,8 @@
  *      （preload 与主进程两侧都会丢弃任何 url 字段）。
  *   2. Bearer Key 只在这里被拼进请求头，**绝不出现在返回值、错误信息、日志**里。
  *      本文件所有错误都只带 `status` / 短错误码 / 固定中文短语。
- *   3. 超时 15 秒；**最多重试一次**，且只在"可重试"错误上重试：
- *      网络错误 / 超时 / 408 / 429 / 5xx；401 / 403 / 400 等永久错误不重试。
+ *   3. 超时 30 秒（思考型模型响应更慢）；**最多重试两次**，每次重试之间有退避等待，
+ *      且只在"可重试"错误上重试：网络错误 / 超时 / 408 / 429 / 5xx；401 / 403 / 400 不重试。
  *   4. 失败返回 `{ok: false, code, message}`，绝不抛异常、绝不把上游响应体回显给用户。
  *   5. `fetch` 与 `setTimeout` 都通过依赖注入传进来，因此测试可以在裸 node 下模拟所有分支
  *      （含"超时"这条路径：注入假定时器就能毫秒级触发超时），**不会发出任何真实网络请求**。
@@ -36,11 +36,14 @@ const CHAT_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 /** 默认对话模型（智谱免费档） */
 const DEFAULT_MODEL = 'glm-4.7-flash';
 
-/** 对话超时（需求：15 秒） */
-const DEFAULT_TIMEOUT_MS = 15000;
+/** 对话超时（需求：30 秒——思考型模型从思考到出正文普遍 4~10 秒，高峰期更慢） */
+const DEFAULT_TIMEOUT_MS = 30000;
 
-/** 最多重试次数（需求：一次） */
-const MAX_RETRIES = 1;
+/** 最多重试次数（需求：两次——免费档限流较频繁，单次重试经常不够） */
+const MAX_RETRIES = 2;
+
+/** 重试前的退避等待（毫秒）：第 n 次失败后等 RETRY_BACKOFF_MS[n-1]，越界取最后一档 */
+const RETRY_BACKOFF_MS = Object.freeze([600, 1500]);
 
 /** 单条消息最大长度（用户输入与历史都按这个上限截断前的校验） */
 const MAX_MESSAGE_CHARS = 1000;
@@ -278,6 +281,15 @@ function createZhipuClient(deps) {
   const timers = options.timers && typeof options.timers.setTimeout === 'function'
     ? options.timers
     : { setTimeout, clearTimeout };
+  // 重试退避的等待实现单独注入：测试传空实现即可跳过真实等待；
+  // 注意**故意不用**上面的 timers——假定时器只存回调不自动触发，会让退避永远挂起
+  const sleepFn = typeof options.sleepFn === 'function'
+    ? options.sleepFn
+    : function (ms) {
+        return new Promise(function (resolve) {
+          setTimeout(resolve, ms);
+        });
+      };
   const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
     ? Math.floor(options.timeoutMs)
     : DEFAULT_TIMEOUT_MS;
@@ -437,6 +449,11 @@ function createZhipuClient(deps) {
           // 回调抛错不影响主流程
         }
       }
+      // 退避等待：给限流的服务端喘口气，连续快重试对 429 没有意义
+      const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)];
+      if (Number.isFinite(backoff) && backoff > 0) {
+        await sleepFn(backoff);
+      }
     }
 
     return fail(last.code, last.status, attempt);
@@ -456,6 +473,7 @@ module.exports = {
   CHAT_ENDPOINT,
   DEFAULT_MODEL,
   DEFAULT_TIMEOUT_MS,
+  RETRY_BACKOFF_MS,
   MAX_RETRIES,
   MAX_MESSAGE_CHARS,
   MAX_HISTORY_ITEMS,

@@ -784,8 +784,8 @@ check(
   /async function chat\(text, options\)/.test(zhipuClientJs) && !/function chat\([^)]*url/i.test(zhipuClientJs)
 );
 check('默认模型 glm-4.7-flash', /const DEFAULT_MODEL = 'glm-4\.7-flash'/.test(zhipuClientJs));
-check('超时 15 秒', /const DEFAULT_TIMEOUT_MS = 15000;/.test(zhipuClientJs));
-check('最多重试一次', /const MAX_RETRIES = 1;/.test(zhipuClientJs));
+check('超时 30 秒', /const DEFAULT_TIMEOUT_MS = 30000;/.test(zhipuClientJs));
+check('最多重试两次', /const MAX_RETRIES = 2;/.test(zhipuClientJs));
 check(
   '只对可重试状态码重试（408/425/429/5xx）',
   /RETRYABLE_STATUS/.test(zhipuClientJs) && /function\s+isRetryable\s*\(/.test(zhipuClientJs) && /408/.test(zhipuClientJs) && /429/.test(zhipuClientJs)
