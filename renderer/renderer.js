@@ -100,6 +100,7 @@
   /** 表情图清单：base 是基础形象；其余为表情变体（文件缺失时自动回退 base） */
   const EXPRESSION_FILES = Object.freeze({
     base: 'pet-girl.png',
+    idle: 'pet-girl-idle.png',
     happy: 'pet-girl-happy.png',
     angry: 'pet-girl-angry.png',
     sleepy: 'pet-girl-sleepy.png',
@@ -112,6 +113,8 @@
 
   /** 可见状态 → 表情：只在有明确表情图时才换，避免无谓的图切换 */
   const STATE_EXPRESSION = Object.freeze({
+    idle: 'idle',
+    hungry: 'idle',
     greet: 'happy',
     happy: 'happy',
     wake: 'happy',

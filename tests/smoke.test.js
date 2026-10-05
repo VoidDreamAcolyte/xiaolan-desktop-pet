@@ -833,8 +833,8 @@ check(
     /while \(messages\.length > 2 && total > MAX_TOTAL_CHARS\)/.test(zhipuClientJs)
 );
 check(
-  '缺陷A：单次回复最多 30 个 Unicode 字符（MAX_REPLY_CHARS + limitReply 按 code point 截断）',
-  /MAX_REPLY_CHARS = 30/.test(zhipuClientJs) && /function\s+limitReply\s*\(/.test(zhipuClientJs) && /Array\.from\(text\)/.test(zhipuClientJs)
+  '缺陷A：单次回复最多 60 个 Unicode 字符（MAX_REPLY_CHARS + limitReply 按 code point 截断）',
+  /MAX_REPLY_CHARS = 60/.test(zhipuClientJs) && /function\s+limitReply\s*\(/.test(zhipuClientJs) && /Array\.from\(text\)/.test(zhipuClientJs)
 );
 check(
   '缺陷E：超时定时器覆盖 fetch + body read，只在 finally 里 clearTimeout',

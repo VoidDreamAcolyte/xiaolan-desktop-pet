@@ -273,7 +273,7 @@ function testPureFunctions() {
   check('最多重试一次', MAX_RETRIES === 1, String(MAX_RETRIES));
   check('模块导出了 endpoint 常量供测试与文档引用', clientModule.CHAT_ENDPOINT === CHAT_ENDPOINT);
 
-  /* ---- 缺陷修复 A：内置鱼设 system 提示词 + 单次回复上限 30 code point ---- */
+  /* ---- 缺陷修复 A：内置鱼设 system 提示词 + 单次回复上限 60 code point ---- */
   check('system 提示词是中文人设（提到白米饭 + 蓝色 + 傲娇）', /白米饭/.test(SYSTEM_PROMPT) && /深海|蓝色/.test(SYSTEM_PROMPT) && /傲娇/.test(SYSTEM_PROMPT));
   check(
     'system 提示词要求口语化与傲娇语气词（哼 / 才不是 / 人家 / 嘛）',
@@ -286,13 +286,13 @@ function testPureFunctions() {
     /失败|受挫/.test(SYSTEM_PROMPT) && /嘴硬/.test(SYSTEM_PROMPT) && /鼓励/.test(SYSTEM_PROMPT) && /不嘲讽|不要嘲讽/.test(SYSTEM_PROMPT)
   );
   check('system 提示词要求只输出正文、不输出思考过程', /只输出/.test(SYSTEM_PROMPT) && /不要输出思考过程/.test(SYSTEM_PROMPT));
-  check('system 提示词写明单次回复最多 30 个字', /30/.test(SYSTEM_PROMPT) && /最多/.test(SYSTEM_PROMPT));
-  check('单次回复上限常量是 30', MAX_REPLY_CHARS === 30, String(MAX_REPLY_CHARS));
-  check('limitReply：不超过 30 个 code point 时原样返回', limitReply('哼，本鱼在呢') === '哼，本鱼在呢');
-  check('limitReply：超长按 code point 截到 30', Array.from(limitReply('字'.repeat(50))).length === 30);
+  check('system 提示词写明单次回复最多 60 个字', /60/.test(SYSTEM_PROMPT) && /最多/.test(SYSTEM_PROMPT));
+  check('单次回复上限常量是 60', MAX_REPLY_CHARS === 60, String(MAX_REPLY_CHARS));
+  check('limitReply：不超过 60 个 code point 时原样返回', limitReply('哼，本鱼在呢') === '哼，本鱼在呢');
+  check('limitReply：超长按 code point 截到 60', Array.from(limitReply('字'.repeat(80))).length === 60);
   check(
     'limitReply：不劈开增补平面字符（emoji 仍完整）',
-    Array.from(limitReply('🐟'.repeat(40))).length === 30 && Array.from(limitReply('🐟'.repeat(40))).every((ch) => ch === '🐟')
+    Array.from(limitReply('🐟'.repeat(80))).length === 60 && Array.from(limitReply('🐟'.repeat(40))).every((ch) => ch === '🐟')
   );
   check('limitReply：非字符串安全返回空串', limitReply(null) === '' && limitReply(42) === '');
 
@@ -570,14 +570,14 @@ async function testRequestShape() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 3b. 缺陷修复 A：单次回复按 code point 限制到 30                              */
+/* 3b. 缺陷修复 A：单次回复按 code point 限制到 60                              */
 /* -------------------------------------------------------------------------- */
 
 async function testReplyLimit() {
   {
     const env = build([{ status: 200, body: { choices: [{ message: { content: '字'.repeat(80) } }] } }]);
     const outcome = await chatTimed(env, '你好', {});
-    check('缺陷A：超长回复被截断到 30 个字符', outcome.result.ok === true && Array.from(outcome.result.content).length === 30, JSON.stringify(outcome.result).slice(0, 120));
+    check('缺陷A：超长回复被截断到 60 个字符', outcome.result.ok === true && Array.from(outcome.result.content).length === 60, JSON.stringify(outcome.result).slice(0, 120));
     check('缺陷A：截断后仍是合法正文（没有被判成 bad-response）', outcome.result.code === undefined);
   }
   {
@@ -586,7 +586,7 @@ async function testReplyLimit() {
     check(
       '缺陷A：按 code point 截断，不把 emoji 劈成半个',
       outcome.result.ok === true &&
-        Array.from(outcome.result.content).length === 30 &&
+        Array.from(outcome.result.content).length === 60 &&
         Array.from(outcome.result.content).every(function (ch) {
           return ch === '🐟';
         })

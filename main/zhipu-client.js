@@ -26,8 +26,8 @@
  *     - 不接受历史里传入的 `system`（历史只允许 user / assistant，system 一律丢弃）；
  *     - 不接受任何外部参数覆盖或移除（`chat(text, options)` 只认 history / onRetry）；
  *     - 在"总条数 / 总字符"裁剪时**永远不会被丢掉**（只从最旧的历史开始丢）。
- *   另外，客户端在返回正文前按 Unicode code point 截断到 `MAX_REPLY_CHARS`（30），
- *   避免模型不服从提示词、把超长回复带出去突破"单次最多 30 个字"的需求。
+ *   另外，客户端在返回正文前按 Unicode code point 截断到 `MAX_REPLY_CHARS`（60），
+ *   避免模型不服从提示词、把超长回复带出去突破"单次最多 60 个字"的需求。
  */
 
 /** 固定 endpoint：不接受任何外部覆盖（需求指定） */
@@ -54,8 +54,8 @@ const MAX_MESSAGES = 8;
 /** 会话总字符数上限（含 system 提示词；防止把超长上下文送上去烧 token） */
 const MAX_TOTAL_CHARS = 4000;
 
-/** 单次回复最大长度（需求：最多 30 个 Unicode 字符，按 code point 计算） */
-const MAX_REPLY_CHARS = 30;
+/** 单次回复最大长度（需求：最多 60 个 Unicode 字符，按 code point 计算） */
+const MAX_REPLY_CHARS = 60;
 
 /**
  * 内置中文鱼设 system 提示词（需求「性格设定」逐条落进提示词）。
@@ -64,10 +64,10 @@ const MAX_REPLY_CHARS = 30;
 const SYSTEM_PROMPT = [
   '你叫「小蓝」，是一个住在星空里的小姑娘，蓝色头发，穿着带小鲸鱼围裙的女仆裙，最爱吃白米饭。',
   '你的性格是元气满满的傲娇小可爱，会撒娇但不腻。',
-  '回复要求：口语化、自然、简短；自然使用「哼」「才不是」「人家」「嘛」这类语气词，但撒娇要克制，不要每句都用。',
+  '回复要求：口语化、自然、像真人聊天，一两句话说完整，别挤牙膏；自然使用「哼」「才不是」「人家」「嘛」这类语气词，但撒娇要克制，不要每句都用。',
   '被夸奖时先害羞一下再承认；失败或受挫时先嘟嘴嘴硬半句，紧接着暖心鼓励，绝对不嘲讽、不挖苦。',
   '只输出要说的正文，不要输出思考过程，不要解释，不要加角色名前缀。',
-  '单次回复最多 30 个字。'
+  '单次回复最多 60 个字。'
 ].join('');
 
 /** 允许重试的 HTTP 状态码：限流 / 超时 / 服务端错误 */
@@ -195,7 +195,7 @@ function buildMessages(text, history) {
 }
 
 /**
- * 按 Unicode code point 把回复截断到 `MAX_REPLY_CHARS`（30）。
+ * 按 Unicode code point 把回复截断到 `MAX_REPLY_CHARS`（60）。
  *
  * 用 `Array.from` 而不是 `String.prototype.slice`：后者按 UTF-16 码元切，
  * 会把 emoji / 增补平面字符劈成半个乱码；`Array.from` 按 code point 切，安全。
@@ -392,7 +392,7 @@ function createZhipuClient(deps) {
       const payload = safeJsonParse(text);
       const content = extractContent(payload);
       if (!content) return { ok: false, code: 'bad-response', status };
-      // 需求：单次回复最多 30 个 Unicode 字符（模型不服从时由客户端兜底截断）
+      // 需求：单次回复最多 60 个 Unicode 字符（模型不服从时由客户端兜底截断）
       return { ok: true, content: limitReply(content) };
     } finally {
       if (timer) timers.clearTimeout(timer);
