@@ -841,6 +841,10 @@ function sendAction(state, options) {
   if (options && Number.isFinite(options.durationMs)) {
     payload.durationMs = Math.round(options.durationMs);
   }
+  if (options && typeof options.flavor === 'string' && options.flavor) {
+    // flavor：同一名动作的变体台词标记（如 taunt + zako = 杂鱼嘲讽）
+    payload.flavor = options.flavor;
+  }
   sendToPet(PET_EVENTS.ACTION, payload);
 }
 
@@ -1057,6 +1061,15 @@ function buildMenuTemplate() {
       }
     },
     { type: 'separator' },
+    {
+      id: MENU_IDS.TAUNT,
+      label: MENU_LABELS.TAUNT,
+      click: () => {
+        // 「看游戏输了」：唤出窗口 + 下发 taunt 动作（zako 变体 → 杂鱼台词）
+        showPetWindow({ announce: false });
+        sendAction('taunt', { flavor: 'zako' });
+      }
+    },
     {
       id: MENU_IDS.CHAT,
       label: MENU_LABELS.CHAT,

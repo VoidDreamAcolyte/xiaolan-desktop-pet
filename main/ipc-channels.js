@@ -170,6 +170,7 @@ const MENU_IDS = Object.freeze({
   FEED: 'feed',
   SLEEP: 'sleep',
   WAKE: 'wake',
+  TAUNT: 'taunt',
   CHAT: 'chat',
   SETTINGS: 'settings',
   QUIT: 'quit'
@@ -180,6 +181,7 @@ const MENU_LABELS = Object.freeze({
   FEED: '喂饭',
   SLEEP: '睡觉',
   WAKE: '叫醒',
+  TAUNT: '嘲讽我（游戏输了点这个）',
   CHAT: '语音对话',
   SETTINGS: '设置',
   QUIT: '退出'

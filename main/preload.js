@@ -443,7 +443,7 @@ const api = {
   /**
    * 订阅主进程下发的动作指令（托盘菜单等触发）。
    * 回调只收到经过白名单过滤的状态名与可选时长，收不到原始 IPC 事件对象。
-   * @param {(state: string, options: {durationMs: number | null}) => void} handler
+   * @param {(state: string, options: {durationMs: number | null, flavor: string | null}) => void} handler
    * @returns {() => void} 取消订阅函数
    */
   onAction(handler) {
@@ -454,7 +454,8 @@ const api = {
       const state = payload && typeof payload.state === 'string' ? payload.state : null;
       if (!state || !ALLOWED_ACTION_SET.has(state)) return;
       const durationMs = payload && Number.isFinite(payload.durationMs) ? payload.durationMs : null;
-      handler(state, { durationMs });
+      const flavor = payload && typeof payload.flavor === 'string' ? payload.flavor : null;
+      handler(state, { durationMs, flavor });
     };
     ipcRenderer.on(PET_EVENTS.ACTION, listener);
     return () => ipcRenderer.removeListener(PET_EVENTS.ACTION, listener);

@@ -185,6 +185,15 @@
     taunt: ['略略略～', '就气你，怎么啦～', '来打我呀～', '哼哼，够不着吧']
   });
 
+  /** 杂鱼嘲讽专属台词池：主进程菜单「嘲讽我（游戏输了点这个）」下发 taunt+zako 变体时使用 */
+  const ZAKO_QUIPS = Object.freeze([
+    '杂鱼～杂鱼～',
+    '真是杂鱼呢～',
+    '连这都输了，杂鱼～',
+    '杂鱼就要多加练习哦～',
+    '又输啦？杂鱼～'
+  ]);
+
   /** 闲置自言自语池：长时间没互动时随机冒一条（不算语音回复，纯气氛） */
   const IDLE_CHATTER = Object.freeze([
     '桌面上好安静呀…',
@@ -203,10 +212,14 @@
   /**
    * 从反应台词池里随机挑一句（池不存在或为空返回空串）。
    * @param {string} action
+   * @param {string} [flavor] 动作变体标记（如 zako=杂鱼嘲讽台词）
    * @returns {string}
    */
-  function pickQuip(action) {
-    const pool = REACTION_QUIPS[action];
+  function pickQuip(action, flavor) {
+    let pool = REACTION_QUIPS[action];
+    if (flavor === 'zako' && action === 'taunt') {
+      pool = ZAKO_QUIPS;
+    }
     if (!pool || pool.length === 0) return '';
     return pool[Math.floor(Math.random() * pool.length)];
   }
@@ -449,7 +462,7 @@
    * 睡着的鱼被直接碰：先把持久模式切回"当前情绪"（饿了就继续饿着，不硬编码 idle），
    * 这样睡觉既不会被 idle 顶掉，醒了以后情绪也不会丢。
    * @param {string} name
-   * @param {{duration?: number}} [options]
+   * @param {{duration?: number, flavor?: string}} [options]
    */
   function userAction(name, options) {
     if (machine.isSleeping()) {
@@ -458,7 +471,7 @@
     const result = machine.request(name, Object.assign({ source: 'user' }, options || {}));
     // 互动台词气泡（VPet 桌宠模拟器风格）：动作被接受就随机冒一句
     if (result && result.accepted) {
-      const quip = pickQuip(name);
+      const quip = pickQuip(name, options && options.flavor);
       if (quip) showBubble(quip, 'info', 2200);
     }
     return result;
@@ -1097,6 +1110,10 @@
       case 'greet':
         greetSeen = true;
         userAction('greet', { duration });
+        return;
+      case 'taunt':
+        // 主进程菜单「嘲讽我」：zako 变体 → 杂鱼台词
+        userAction('taunt', { duration, flavor: options && options.flavor });
         return;
       default:
         userAction(state, { duration });
