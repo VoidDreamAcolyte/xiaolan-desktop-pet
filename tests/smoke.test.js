@@ -474,7 +474,9 @@ const STATE_LIST = [
   'flip',
   'greet',
   'angry',
-  'wake'
+  'wake',
+  'shake',
+  'taunt'
 ];
 
 for (const state of STATE_LIST) {
@@ -492,7 +494,7 @@ check('styles.css 有游动朝向类（swim-left / swim-right）', /\.swim-left\
 check('styles.css 关掉了 id 默认隐藏写法（避免特异度压过状态类）', !/#fish-svg\s+#[\w-]+\s*\{[^}]*opacity:\s*0/.test(cssCode));
 
 // 每个状态都必须真的"有动画"或"有可见姿态"，不能只是挂个空类
-const ANIMATED_STATES = ['blink', 'eat', 'happy', 'hungry', 'sleep', 'talking', 'thinking', 'dragged', 'poke', 'pet', 'swim', 'flip', 'greet', 'angry', 'wake'];
+const ANIMATED_STATES = ['blink', 'eat', 'happy', 'hungry', 'sleep', 'talking', 'thinking', 'dragged', 'poke', 'pet', 'swim', 'flip', 'greet', 'angry', 'wake', 'shake', 'taunt'];
 for (const state of ANIMATED_STATES) {
   const ruleBlock = new RegExp(`\\.state-${state}[^{]*\\{[^}]*\\}`, 'g');
   const blocks = cssCode.match(ruleBlock) || [];
@@ -1426,7 +1428,7 @@ const preloadStates = parseStringArray(preloadJsCode, 'ALLOWED_ACTIONS');
 const rendererStateClasses = parseStringArray(rendererJs, 'STATE_CLASSES');
 const rendererModeClasses = parseStringArray(rendererJs, 'MODE_CLASSES');
 
-check('ipc-channels.js 定义了状态白名单 PET_STATES（16 项）', Array.isArray(mainStates) && mainStates.length === 16, mainStates ? String(mainStates.length) : '未解析到');
+check('ipc-channels.js 定义了状态白名单 PET_STATES（18 项）', Array.isArray(mainStates) && mainStates.length === 18, mainStates ? String(mainStates.length) : '未解析到');
 check(
   'PET_STATES 覆盖需求要求的 15 个状态 + wake',
   Array.isArray(mainStates) && [...STATE_LIST].every((state) => mainStates.includes(state)),
@@ -1450,7 +1452,7 @@ check(
   Array.isArray(rendererModeClasses) && rendererModeClasses.join(',') === 'mode-idle,mode-hungry,mode-angry,mode-sleep',
   rendererModeClasses ? rendererModeClasses.join(',') : '未解析到 MODE_CLASSES'
 );
-check('全部 16 个状态都有托盘中文标签', STATE_LIST.every((state) => new RegExp(`\\b${state}:\\s*'`).test(channelsJs)));
+check('全部 18 个状态都有托盘中文标签', STATE_LIST.every((state) => new RegExp(`\\b${state}:\\s*'`).test(channelsJs)));
 
 /* -------------------------------------------------------------------------- */
 /* A10. 回归检查②：托盘右键用托盘 API + 共用模板；窗口右键省略坐标                */

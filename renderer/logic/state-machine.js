@@ -15,7 +15,7 @@
  * ---------------------------------------------------------------------------
  * 1. 持久模式（persistent）：idle / hungry / angry / sleep
  *    由饱食度与菜单驱动，不会自己超时回落。可见状态 = 动作层没有动作时的底色。
- * 2. 短暂动作（transient）：blink / eat / happy / talking / thinking / poke / pet /
+ * 2. 短暂动作（transient）：blink / eat / happy / talking / thinking / poke / pet / shake / taunt /
  *    swim / flip / greet / wake
  *    有确定时长，时间到就"回落"到当前持久模式，并回调 onActionEnd 让上层串场
  *    （例如 eat 结束 → happy）。任何时刻最多只有一个短暂动作，定时器统一清理。
@@ -73,6 +73,9 @@
     pet: Object.freeze({ kind: 'transient', duration: 1700, priority: 45, interruptible: true }),
     poke: Object.freeze({ kind: 'transient', duration: 1100, priority: 50, interruptible: true }),
     thinking: Object.freeze({ kind: 'transient', duration: 2400, priority: 55, interruptible: true }),
+    // 摇头（闲置调皮动作：左右晃脑袋）；吐舌头嘲讽（挑眉吐舌+得意晃）
+    shake: Object.freeze({ kind: 'transient', duration: 1400, priority: 40, interruptible: true }),
+    taunt: Object.freeze({ kind: 'transient', duration: 1800, priority: 45, interruptible: true }),
     // 吃饭与说话不被打断（随机动作与低优先动作都无法插队，只能用户强插）
     eat: Object.freeze({ kind: 'transient', duration: 3000, priority: 60, interruptible: false }),
     talking: Object.freeze({ kind: 'transient', duration: 2600, priority: 65, interruptible: false }),

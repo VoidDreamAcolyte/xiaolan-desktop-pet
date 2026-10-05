@@ -137,8 +137,8 @@ check(
     if (!m) return false;
     const t = m[0];
     return (
-      t.includes("head: ['pet', 'poke', 'greet']") &&
-      t.includes("face: ['poke', 'pet', 'thinking']") &&
+      t.includes("head: ['pet', 'poke', 'shake']") &&
+      t.includes("face: ['poke', 'taunt', 'thinking']") &&
       t.includes("belly: ['happy', 'greet', 'poke']") &&
       t.includes("hands: ['greet', 'happy', 'pet']") &&
       t.includes("feet: ['flip', 'happy', 'poke']") &&

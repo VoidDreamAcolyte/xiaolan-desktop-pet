@@ -108,7 +108,7 @@ const REQUIRED_STATES = [
 const missing = REQUIRED_STATES.filter((name) => !STATE_NAMES.includes(name));
 check('状态表覆盖需求要求的 15 个可触发状态', missing.length === 0, `缺少：${missing.join(', ')}`);
 check('额外保留 wake 状态', STATE_NAMES.includes('wake'));
-check('状态表共 16 项', STATE_NAMES.length === 16, `实际：${STATE_NAMES.length}`);
+check('状态表共 18 项', STATE_NAMES.length === 18, `实际：${STATE_NAMES.length}`);
 
 for (const name of REQUIRED_STATES) {
   const def = STATE_DEFS[name];

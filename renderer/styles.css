@@ -1599,3 +1599,75 @@ body {
     transform: rotate(8deg) translateY(3px) scale(0.97, 1.04);
   }
 }
+
+/* --------------------------------------------------------------------------
+   shake 摇头（闲置调皮动作）：左右晃脑袋，幅度前大后小自然收住
+   -------------------------------------------------------------------------- */
+.stage.state-shake #fish-action {
+  animation: girl-head-shake 1.4s ease-in-out;
+}
+
+@keyframes girl-head-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(-7deg);
+  }
+  35% {
+    transform: rotate(7deg);
+  }
+  55% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(4deg);
+  }
+  90% {
+    transform: rotate(-1.5deg);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   taunt 吐舌头嘲讽：歪头+小幅度得意晃，舌头探出来左右摆
+   -------------------------------------------------------------------------- */
+.stage.state-taunt #fish-action {
+  animation: girl-taunt-lean 1.8s ease-in-out;
+}
+
+.stage.state-taunt #tongue {
+  opacity: 1;
+  animation: tongue-wiggle 0.45s ease-in-out 4;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+@keyframes girl-taunt-lean {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  20% {
+    transform: rotate(-6deg) translateY(1px);
+  }
+  45% {
+    transform: rotate(3deg) translateY(0);
+  }
+  70% {
+    transform: rotate(-5deg) translateY(1px);
+  }
+  90% {
+    transform: rotate(1deg) translateY(0);
+  }
+}
+
+@keyframes tongue-wiggle {
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+  }
+  50% {
+    transform: scaleY(1.15) scaleX(0.94);
+  }
+}

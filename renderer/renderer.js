@@ -88,7 +88,9 @@
     'state-flip',
     'state-greet',
     'state-angry',
-    'state-wake'
+    'state-wake',
+    'state-shake',
+    'state-taunt'
   ]);
 
   /** 持久模式类：驱动"底色"动画（漂浮 / 发蔫 / 抖动 / 睡觉呼吸） */
@@ -159,7 +161,7 @@
   /** 两次 pet 之间的冷却（毫秒），避免连续刷屏 */
   const PET_COOLDOWN_MS = 2600;
 
-  /** 随机小动作间隔范围（毫秒）：发呆 / 翻肚皮 / 开心 */
+  /** 随机小动作间隔范围（毫秒）：发呆 / 翻肚皮 / 开心 / 摇头 / 吐舌头 */
   const IDLE_ACTION_MIN_MS = 45000;
   const IDLE_ACTION_RANGE_MS = 65000;
   /** 随机游动间隔范围（毫秒）：约 3~6 分钟 */
@@ -178,7 +180,9 @@
     thinking: ['让我想想…', '唔…这是个好问题', '（努力思考中）', '嗯……然后呢？'],
     eat: ['嗷呜，好吃！', '谢谢投喂～', '还要还要！', '饭饭最香了'],
     wake: ['唔…我睡着了吗？', '哈欠…我起来啦', '叫我有什么事呀～'],
-    dragged: ['放我下来！', '哇，要飞起来啦', '哇啊啊，救命——']
+    dragged: ['放我下来！', '哇，要飞起来啦', '哇啊啊，救命——'],
+    shake: ['不对不对～', '才不是这样呢', '摇头摇头～'],
+    taunt: ['略略略～', '就气你，怎么啦～', '来打我呀～', '哼哼，够不着吧']
   });
 
   /** 闲置自言自语池：长时间没互动时随机冒一条（不算语音回复，纯气氛） */
@@ -616,7 +620,7 @@
       idleActionTimer = 0;
       if (canRunRandom()) {
         // 发呆多一点，偶尔翻个身 / 自己开心一下 / 自己挥挥手（VPet 式自娱自乐）
-        const pool = ['thinking', 'thinking', 'flip', 'happy', 'greet', 'greet'];
+        const pool = ['thinking', 'thinking', 'flip', 'happy', 'greet', 'greet', 'shake', 'taunt'];
         const pick = pool[Math.floor(Math.random() * pool.length)];
         machine.request(pick, { source: 'random' });
       }
@@ -681,8 +685,8 @@
    *   - 其它 → 惊讶 / 疑问 / 转圈轮换
    */
   const TAP_POOLS = Object.freeze({
-    head: ['pet', 'poke', 'greet'],
-    face: ['poke', 'pet', 'thinking'],
+    head: ['pet', 'poke', 'shake'],
+    face: ['poke', 'taunt', 'thinking'],
     belly: ['happy', 'greet', 'poke'],
     hands: ['greet', 'happy', 'pet'],
     feet: ['flip', 'happy', 'poke'],

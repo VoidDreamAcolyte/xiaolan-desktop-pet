@@ -138,7 +138,9 @@ const PET_STATES = Object.freeze([
   'flip',
   'greet',
   'angry',
-  'wake'
+  'wake',
+  'shake',
+  'taunt'
 ]);
 
 /** 状态 → 托盘提示用的简体中文短标签（只用于托盘 tooltip，不是台词、不显示气泡） */
@@ -158,7 +160,9 @@ const STATE_LABELS = Object.freeze({
   flip: '翻肚皮',
   greet: '打招呼',
   angry: '生气',
-  wake: '醒来'
+  wake: '醒来',
+  shake: '摇头',
+  taunt: '吐舌头'
 });
 
 /** 菜单项 id：托盘右键菜单与窗口右键菜单共用同一套 id，保证行为完全一致 */

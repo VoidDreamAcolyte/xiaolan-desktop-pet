@@ -105,7 +105,9 @@ const ALLOWED_ACTIONS = Object.freeze([
   'flip',
   'greet',
   'angry',
-  'wake'
+  'wake',
+  'shake',
+  'taunt'
 ]);
 
 const ALLOWED_ACTION_SET = new Set(ALLOWED_ACTIONS);
