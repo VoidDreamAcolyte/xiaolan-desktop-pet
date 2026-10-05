@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <!--
+    内容安全策略（CSP）—— 设置窗口比桌宠窗口更需要严格：
+      - default-src 'none'：默认什么都不许加载；
+      - img-src 'none'：设置页不需要任何图片（图标全是 CSS / 文字）；
+      - style-src 'self' 'unsafe-inline'：本地 CSS 与行内样式；
+      - script-src 'self'：只允许本地脚本，**没有 unsafe-inline、没有 eval**；
+      - connect-src 'none'：设置页**自己不能发任何网络请求** ——
+        云端对话全部由主进程发起（Key 也只在主进程里），渲染层连 fetch 都被 CSP 拦死；
+      - form-action / frame-ancestors / base-uri 全部锁死，禁止外链与嵌套。
+    这样即使页面里被注入内容，也无法外发数据、无法加载远程页面、无法开新窗口。
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'">
+  <title>小蓝 · 设置</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-head">
+      <h1>小蓝 · 设置</h1>
+      <p class="subtitle">阶段 4：连续语音对话（麦克风 + VAD + GLM-ASR + GLM-TTS）</p>
+    </header>
+
+    <!--
+      说明条：把"这一阶段到底做了什么、没做什么"写在最显眼的位置，
+      避免用户以为填了 Key 什么都能做（或反过来，以为没 Key 就完全不能用）。
+    -->
+    <p class="notice" role="note">
+      本页负责<strong>配置智谱 API Key、对话模型，以及语音对话设置</strong>（麦克风开关、VAD 灵敏度、
+      静音判定时长、GLM-TTS 音色、音量、字幕模式），并可以手动测试连接。
+      麦克风默认<strong>开着</strong>：直接说话就会自动断句、识别、回复并语音播报，不需要按键。
+      没有 Key 时云端识别会跳过，改用本机 faster-whisper（装了才能用），
+      <strong>识别结果不会发给聊天模型</strong>，只在鱼头顶提示去 open.bigmodel.cn 领 Key。
+    </p>
+
+    <!-- ============================ API Key ============================ -->
+    <section class="card" aria-labelledby="key-title">
+      <h2 id="key-title">1. 智谱 API Key</h2>
+
+      <div class="row">
+        <label class="label" for="api-key">API Key</label>
+        <input id="api-key" class="input" type="password" autocomplete="off" spellcheck="false"
+               placeholder="粘贴 open.bigmodel.cn 上申请的 Key">
+      </div>
+
+      <p class="hint" id="key-state">正在读取本机配置…</p>
+      <p class="hint" id="key-source-hint"></p>
+
+      <div class="actions">
+        <button id="save-button" class="btn btn-primary" type="button">保存设置</button>
+        <button id="clear-button" class="btn btn-ghost" type="button">清除本机保存的 Key</button>
+      </div>
+    </section>
+
+    <!-- ============================ 模型 ============================ -->
+    <section class="card" aria-labelledby="model-title">
+      <h2 id="model-title">2. 对话模型</h2>
+
+      <div class="row">
+        <label class="label" for="model">模型名</label>
+        <input id="model" class="input" type="text" autocomplete="off" spellcheck="false"
+               placeholder="glm-4.7-flash">
+      </div>
+      <p class="hint">
+        默认 <code>glm-4.7-flash</code>（智谱免费档）。请求地址由主进程写死为
+        <code id="endpoint">智谱 OpenAI 兼容接囗</code>，
+        界面无法改动它。
+      </p>
+    </section>
+
+    <!-- ============================ 测试连接 ============================ -->
+    <section class="card" aria-labelledby="test-title">
+      <h2 id="test-title">3. 测试连接</h2>
+      <p class="hint">
+        只有你点下面的按钮时才会发一次最小对话请求（超时 15 秒、最多重试一次）。
+        启动应用、打开桌宠、打开本页面都<strong>不会</strong>自动联网。
+        还没保存 Key 也可以先测：输入框里的 Key 会直接用于本次测试，测试不会把它存下来；
+        如果输入框里的格式不对，会<strong>立即在本地提示</strong>，不会联网、也不会拿旧 Key 去测。
+      </p>
+      <div class="actions">
+        <button id="test-button" class="btn" type="button">测试连接</button>
+        <span class="result" id="test-result" role="status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <!-- ============================ 语音对话设置 ============================ -->
+    <section class="card" aria-labelledby="voice-title">
+      <h2 id="voice-title">4. 语音对话</h2>
+
+      <div class="row">
+        <label class="label" for="mic-enabled">麦克风</label>
+        <label class="checkbox">
+          <input id="mic-enabled" type="checkbox">
+          <span>启用（默认开；关掉后鱼不再拾音，菜单「语音对话」与 Ctrl+Shift+V 仍可临时开关）</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="label" for="vad-sensitivity">VAD 灵敏度</label>
+        <input id="vad-sensitivity" class="input input-number" type="number" min="0" max="1" step="0.05">
+        <span class="hint-inline">0~1，越大越灵敏（越大越容易被环境噪音触发，默认 0.5）</span>
+      </div>
+
+      <div class="row">
+        <label class="label" for="vad-silence">静音判定</label>
+        <input id="vad-silence" class="input input-number" type="number" min="400" max="1500" step="50">
+        <span class="hint-inline">毫秒，400~1500，默认 800：连续静音超过它就认为你说完了</span>
+      </div>
+
+      <div class="row">
+        <label class="label" for="tts-voice">GLM-TTS 音色</label>
+        <select id="tts-voice" class="input input-select"></select>
+        <span class="hint-inline">系统音色；云端合成失败会自动降级到 edge-tts / 本机语音</span>
+      </div>
+
+      <div class="row">
+        <label class="label" for="volume">音量</label>
+        <input id="volume" class="input input-number" type="number" min="0" max="1" step="0.05">
+        <span class="hint-inline">0~1，播报 GLM-TTS / edge-tts / 本机语音时都按这个音量播放</span>
+      </div>
+
+      <div class="row">
+        <label class="label" for="subtitle-mode">字幕模式</label>
+        <label class="checkbox">
+          <input id="subtitle-mode" type="checkbox">
+          <span>开启后，语音播报的同时在鱼头顶显示<strong>同一段文字</strong>（默认关：回复只走语音）</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="label" for="pet-scale">桌宠大小</label>
+        <input id="pet-scale" class="input input-number" type="number" min="50" max="200" step="10" value="100"
+               aria-describedby="pet-scale-hint">
+        <span class="hint-inline">%，50~200，默认 100；<strong id="pet-scale-value">100%</strong>，改完立即生效，不用点保存</span>
+        <p class="hint" id="pet-scale-hint">
+          调整桌宠整体的显示大小：100% 为默认尺寸（360×340），最大 200%（720×680），最小 50%（180×170）。
+          无论多大都不会飘出屏幕或被任务栏挡住。
+        </p>
+      </div>
+
+      <div class="actions">
+        <button id="save-voice-button" class="btn btn-primary" type="button">保存语音设置</button>
+        <span class="result" id="voice-result" role="status" aria-live="polite"></span>
+      </div>
+
+      <ul class="list">
+        <li><strong>免按键连续对话</strong>：麦克风默认开，检测到人声开始录音，连续静音 800ms 自动断句送去识别；
+          一轮结束后自动回到听音状态，可以直接说下一句。</li>
+        <li><strong>30 秒无人说话</strong>会进入低采样监测省 CPU，一检测到声音立刻唤醒；
+          单段语音最长 30 秒，到点自动安全切段继续。</li>
+        <li><strong>防回声</strong>：采集强制开启回声消除 / 噪音抑制 / 自动增益；
+          语音播报期间会<strong>停止采集</strong>，播完再恢复，避免鱼"自言自语"。</li>
+        <li><strong>快捷键</strong>：全局 <code>Ctrl+Shift+V</code> 只做麦克风开关；
+          如果被别的程序占用，程序会提示改用右键菜单「语音对话」，不会崩溃。</li>
+        <li><strong>本地识别（可选）</strong>：装好 Python + faster-whisper 并把模型放到用户数据目录的
+          <code>whisper-models</code> 子目录后，云端识别失败时会自动降级本地识别；
+          <strong>只在 nvidia-smi 空闲显存 &gt; 1.5GB 时才加载</strong>，绝不抢游戏显存。</li>
+        <li><strong>隐私</strong>：麦克风音频只在内存与临时目录里处理，识别完成 / 失败都会删除；
+          对话历史只在内存里保留最近 6 条，不写盘、不记录音频或转写日志。</li>
+      </ul>
+    </section>
+
+    <!-- ============================ 安全与隐私说明 ============================ -->
+    <section class="card" aria-labelledby="security-title">
+      <h2 id="security-title">5. Key 的保存方式与限制</h2>
+      <ul class="list">
+        <li><strong>只在主进程处理</strong>：Key 不会进入页面，也不会被回传；界面永远只能看到「已配置」。</li>
+        <li><strong>加密落盘</strong>：Key 用 Electron <code>safeStorage</code>（Windows 上走 DPAPI，绑定当前
+          Windows 用户账户）加密后写入 <code id="config-path">应用用户数据目录</code> 下的
+          <code>settings.json</code>，<strong>绝不明文落盘</strong>。</li>
+        <li><strong>不写日志、不进报错</strong>：任何错误信息里都不会带 Key 的内容或片段。</li>
+        <li><strong>环境变量优先</strong>：如果系统里设置了 <code>ZHIPU_API_KEY</code>，它优先于这里填写的 Key；
+          环境变量的值同样不会显示在界面上。</li>
+        <li><strong>兜底策略</strong>：如果本机 <code>safeStorage</code> 不可用，Key 只保存在本次会话的内存里，
+          界面会明确提示"重启后需要重新填写" —— 宁可不保存，也不退回明文。</li>
+        <li><strong>仍需保护 Windows 账户</strong>：加密绑定当前用户账户，别人登录同一个账户、或以你的身份运行程序
+          仍然能解密使用，请照常保护好系统登录密码。</li>
+      </ul>
+      <p class="hint">
+        还没有 Key？到 <code>open.bigmodel.cn</code>（智谱开放平台）注册并申请免费档 Key，
+        再回到本页粘贴保存。
+      </p>
+    </section>
+
+    <footer class="page-foot">
+      <p class="hint" id="global-status" role="status" aria-live="polite">准备就绪。</p>
+      <p class="hint">
+        本窗口只加载本地页面：CSP 禁止远程内容、禁止外链、禁止新窗口，权限申请默认拒绝。
+      </p>
+    </footer>  </main>
+
+  <script src="settings.js"></script>
+</body>
+</html>

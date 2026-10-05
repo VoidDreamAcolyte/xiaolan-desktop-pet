@@ -1,0 +1,327 @@
+/*
+ * 蓝色大肥鱼 —— 设置窗口样式（阶段 3）
+ *
+ * 设计约束：
+ *   - 无框架、无外部字体、无图片：只用系统字体 + 纯 CSS，任何远程资源都不会被加载
+ *     （CSP 里 img-src 'none'，字体也只能用系统自带的）；
+ *   - 配色沿用桌宠的深海蓝（#0d4a78 / #1b6ea8 / #062a49），但底色是浅色卡片式，
+ *     因为设置页是"正常窗口"，需要长时间阅读的舒适度；
+ *   - 所有可点区域都有 :focus-visible 轮廓，键盘也能操作。
+ */
+
+:root {
+  --bff-deep: #062a49;
+  --bff-blue: #0d4a78;
+  --bff-blue-light: #1b6ea8;
+  --bff-blue-soft: #e8f2fa;
+  --bff-line: #cfe0ee;
+  --bff-text: #10202e;
+  --bff-text-dim: #55708a;
+  --bff-ok: #1c7a4a;
+  --bff-warn: #a35b00;
+  --bff-error: #a52121;
+  --bff-radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f4f9fd 0%, #e9f1f8 100%);
+  color: var(--bff-text);
+  font-family: "Microsoft YaHei", "Segoe UI", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  /* 设置窗口是普通窗口，可以选中文字复制（桌宠窗口才是不可选中的） */
+  user-select: text;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 22px 20px 32px;
+}
+
+.page-head h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--bff-deep);
+}
+
+.subtitle {
+  margin: 0 0 14px;
+  color: var(--bff-text-dim);
+  font-size: 13px;
+}
+
+.notice {
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--bff-line);
+  border-left: 4px solid var(--bff-blue-light);
+  border-radius: var(--bff-radius);
+  background: #ffffff;
+  color: var(--bff-text);
+  font-size: 13px;
+}
+
+.card {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--bff-line);
+  border-radius: var(--bff-radius);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(6, 42, 73, 0.06);
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: var(--bff-blue);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.label {
+  flex: 0 0 82px;
+  color: var(--bff-text-dim);
+  font-size: 13px;
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--bff-line);
+  border-radius: 8px;
+  background: #fbfdff;
+  color: var(--bff-text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.input:focus {
+  outline: 2px solid var(--bff-blue-light);
+  outline-offset: 1px;
+  border-color: var(--bff-blue-light);
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--bff-text-dim);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.hint code,
+.list code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--bff-blue-soft);
+  color: var(--bff-blue);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* --------------------------------------------------------------------------
+   阶段 4：语音设置控件（数字输入 / 下拉 / 复选框）
+   -------------------------------------------------------------------------- */
+
+/* 数字输入与下拉不需要占满整行，右边留给说明文字 */
+.input-number {
+  flex: 0 0 110px;
+}
+
+.input-select {
+  flex: 0 0 190px;
+}
+
+/* 行内说明：跟在控件后面的小字 */
+.hint-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--bff-text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 复选框行：让长说明文字能自然换行 */
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--bff-text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.checkbox input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--bff-blue);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 7px 15px;
+  border: 1px solid var(--bff-blue-light);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--bff-blue);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--bff-blue-soft);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--bff-deep);
+  outline-offset: 2px;
+}
+
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--bff-blue);
+  border-color: var(--bff-blue);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: var(--bff-blue-light);
+}
+
+.btn-ghost {
+  border-color: var(--bff-line);
+  color: var(--bff-text-dim);
+}
+
+.result {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 12.5px;
+  word-break: break-word;
+}
+
+/* 状态色：一次性的内联结果（不用 window.alert，也不弹一堆框） */
+.state-ok {
+  color: var(--bff-ok);
+}
+
+.state-warn {
+  color: var(--bff-warn);
+}
+
+.state-error {
+  color: var(--bff-error);
+}
+
+.state-info {
+  color: var(--bff-text-dim);
+}
+
+.card-ok {
+  border-color: #bfe3cd;
+}
+
+.card-warn {
+  border-color: #f0d9b5;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.list li {
+  margin-bottom: 6px;
+}
+
+.link-text {
+  color: var(--bff-blue);
+  font-weight: 600;
+}
+
+.page-foot {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--bff-line);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: linear-gradient(180deg, #0b1f2f 0%, #071626 100%);
+    color: #dbe8f2;
+  }
+
+  .card,
+  .notice {
+    background: #0f2739;
+    border-color: #1d4560;
+    color: #dbe8f2;
+  }
+
+  .page-head h1 {
+    color: #cfe6f7;
+  }
+
+  .input {
+    background: #0b1f2f;
+    border-color: #1d4560;
+    color: #dbe8f2;
+  }
+
+  .btn {
+    background: #0f2739;
+    color: #cfe6f7;
+  }
+
+  .btn-primary {
+    background: var(--bff-blue-light);
+    color: #ffffff;
+  }
+
+  .hint,
+  .label,
+  .subtitle {
+    color: #9db9cd;
+  }
+
+  .hint code,
+  .list code {
+    background: #123049;
+    color: #bcdcf3;
+  }
+}

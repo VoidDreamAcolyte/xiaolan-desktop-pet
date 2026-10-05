@@ -1,0 +1,32 @@
+{
+  "name": "blue-fat-fish",
+  "productName": "蓝色大肥鱼",
+  "version": "0.3.0",
+  "private": true,
+  "description": "桌面宠物「蓝色大肥鱼」——阶段 4：连续语音对话（免按键 VAD 断句 + WAV 编码 + GLM-ASR 云端/本地识别 + GLM-TTS/edge-tts/SAPI 三级合成 + 字幕 + 麦克风权限收紧）。唤醒词、游戏陪玩、战场报点、安装器 / 自启等仍属后续阶段，未实现。",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "smoke": "node tests/smoke.test.js",
+    "check": "node tests/smoke.test.js",
+    "test:unit": "node tests/state-machine.test.js && node tests/fullness.test.js && node tests/swim-plan.test.js && node tests/settings-store.test.js && node tests/zhipu-client.test.js && node tests/settings-preload.test.js && node tests/vad.test.js && node tests/wav.test.js && node tests/turn-taking.test.js && node tests/net-retry.test.js && node tests/asr-client.test.js && node tests/tts-client.test.js && node tests/voice-audio-payload.test.js && node tests/voice-permission.test.js && node tests/native-speech.test.js && node tests/local-whisper.test.js",
+    "test:voice": "node tests/vad.test.js && node tests/wav.test.js && node tests/turn-taking.test.js && node tests/net-retry.test.js && node tests/asr-client.test.js && node tests/tts-client.test.js && node tests/voice-audio-payload.test.js && node tests/voice-permission.test.js && node tests/native-speech.test.js && node tests/local-whisper.test.js",
+    "test": "node tests/state-machine.test.js && node tests/fullness.test.js && node tests/swim-plan.test.js && node tests/settings-store.test.js && node tests/zhipu-client.test.js && node tests/settings-preload.test.js && node tests/vad.test.js && node tests/wav.test.js && node tests/turn-taking.test.js && node tests/net-retry.test.js && node tests/asr-client.test.js && node tests/tts-client.test.js && node tests/voice-audio-payload.test.js && node tests/voice-permission.test.js && node tests/native-speech.test.js && node tests/local-whisper.test.js && node tests/smoke.test.js",
+    "icons": "node tools/make-icons.js",
+    "postinstall": "node tools/make-icons.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1"
+  },
+  "dependencies": {},
+  "keywords": [
+    "electron",
+    "desktop-pet",
+    "svg"
+  ],
+  "license": "UNLICENSED"
+}

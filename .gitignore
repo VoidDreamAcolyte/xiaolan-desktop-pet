@@ -1,0 +1,17 @@
+# 依赖与构建产物（阶段 1 只需要 Electron 本体）
+node_modules/
+dist/
+out/
+*.log
+
+# 本地配置：API Key 等敏感信息一律不入库（后续阶段使用）
+config.local.json
+.env
+
+# 本地工作目录：模型权重、调试脚本、中间产物（约 1.2GB），不入库
+work/
+
+# 开发过程的备份文件
+*.bak-fish
+*.bak-bg
+

@@ -1,0 +1,1600 @@
+/* ==========================================================================
+   蓝色大肥鱼 —— 阶段 2 样式与动作动画
+   ==========================================================================
+   类名模型（#stage 上同时挂三类 class，互不干扰）：
+     .state-<visible>  当前"对外可见状态"（15 个动作 + wake），同一时刻只有一个
+     .mode-<base>      当前"持久底色模式"（idle / hungry / angry / sleep），同一时刻只有一个
+     .swim-left/.swim-right  仅游动时附加的朝向
+     .is-dragging      仅用于光标样式
+
+   为什么要把"动作"和"底色"分开：
+     短暂动作（眨眼、被戳、打招呼…）播完要回落到持久模式；如果只用一个类，
+     眨眼时 idle 的漂浮动画会一起被移除，鱼会突然"卡住一下"。
+     分成 state-* / mode-* 之后：
+       · 持久模式的动画只作用在 #fish-root（漂浮 / 发蔫 / 生气抖动 / 睡觉呼吸）；
+       · 短暂动作的动画只作用在 #fish-action（弹跳 / 转圈 / 翻肚皮 / 挣扎 / 倾斜）；
+     两层各管一个元素，不会出现两条规则抢同一个 transform 的冲突。
+
+   可见文字：本阶段【没有任何可见文字气泡】。需求要求"说话默认语音、文字气泡只在
+   开启字幕时显示"，而语音要在后续阶段才做，所以现在不用文字冒充语音；
+   只保留 #a11y-status 这个 .sr-only 的无障碍状态文本（读屏可见、屏幕上不可见）。
+   ========================================================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: transparent; /* 关键：透明页面背景 */
+  overflow: hidden;
+  /* 桌宠是"贴在桌面上的东西"，禁止选中文字与系统右键菜单 */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   舞台布局
+   -------------------------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 默认鼠标穿透（由主进程 setIgnoreMouseEvents(true) 配合）：
+     光标在透明区域时不拦截桌面操作，只有落在鱼身上才由 JS 切成可点击 */
+  pointer-events: none;
+}
+
+#fish-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+/* 只有"鱼的实际图形"响应鼠标，SVG 的空白区域继续穿透给桌面 */
+#fish-svg #fish-root {
+  pointer-events: none;
+}
+
+#fish-svg #body,
+#fish-svg #tail,
+#fish-svg #fins,
+#fish-svg #eyes,
+#fish-svg #mouth,
+#fish-svg #bowl {
+  pointer-events: visiblePainted;
+  cursor: grab;
+}
+
+.stage.is-dragging #fish-svg #body,
+.stage.is-dragging #fish-svg #tail,
+.stage.is-dragging #fish-svg #fins,
+.stage.is-dragging #fish-svg #eyes,
+.stage.is-dragging #fish-svg #mouth {
+  cursor: grabbing;
+}
+
+/* 仅供读屏与调试的状态文本：屏幕上看不见，但 aria-live 会念出来 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   SVG 动画基座
+   -------------------------------------------------------------------------- */
+
+/* 动作层 / 底座层：围绕自身中心做旋转缩放 */
+#fish-svg #fish-root,
+#fish-svg #fish-action {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* 统一的元素变换基准，保证旋转 / 缩放围绕元素自身中心 */
+#fish-svg #tail,
+#fish-svg #fin-left,
+#fish-svg #fin-right,
+#fish-svg #bowl,
+#fish-svg #blush,
+#fish-svg #zzz,
+#fish-svg #sweat,
+#fish-svg #think,
+#fish-svg #happy-bubbles,
+#fish-svg #heart,
+#fish-svg #hungry-mark,
+#fish-svg #swim-trail,
+#fish-svg #brows,
+#fish-svg .rice,
+#fish-svg .pupil,
+#fish-svg .bubble,
+#fish-svg .heart,
+#fish-svg .growl,
+#fish-svg .trail,
+#fish-svg .anger-line,
+#fish-svg .brow,
+#fish-svg .think-bubble {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+#fish-svg #fin-left {
+  transform-origin: 20% 10%;
+}
+
+#fish-svg #fin-right {
+  transform-origin: 15% 15%;
+}
+
+#fish-svg #tail {
+  transform-origin: 100% 50%;
+}
+
+#fish-svg #zzz,
+#fish-svg #sweat,
+#fish-svg #think,
+#fish-svg #hungry-mark {
+  transform-origin: 50% 100%;
+}
+
+/* 游动时整组水泡要能按朝向水平镜像（围绕画布中心翻转） */
+#fish-svg #swim-trail {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+/* Zzz / 问号用系统无衬线字体，避免 SVG 默认衬线体显得突兀 */
+#fish-svg #zzz text,
+#fish-svg #think text {
+  font-family: "Segoe UI", "Microsoft YaHei", "微软雅黑", sans-serif;
+}
+
+/* --------------------------------------------------------------------------
+   情绪符号的"默认隐藏"
+   --------------------------------------------------------------------------
+   注意：这里刻意【不写】类似 `#fish-svg #eyes-smile { opacity: 0 }` 的默认规则。
+   两个 id 组成的选择器特异度是 (2,0,0)，会高过 `.stage.state-happy #eyes-smile`
+   这种 (0,2,1) 的状态规则，导致状态类怎么加都显示不出来（这是阶段 1 就潜伏着的
+   一个坑：睡觉时其实只藏了睁眼、闭眼弧线从来没显示过）。
+   所以默认隐藏全部交给 assets/fish.svg 里的 opacity="0" **表现属性**：
+   表现属性优先级低于任何 CSS 规则，状态类可以稳定地把它们显示出来。
+   烟测会检查每个符号元素都带 opacity="0"。
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   底座层 mode-*：持久模式动画（idle / hungry / angry / sleep）
+   -------------------------------------------------------------------------- */
+
+/* idle 待机：缓慢上下浮动 + 尾巴轻摆 + 小短鳍微摆 + 轻微呼吸 */
+.stage.mode-idle #fish-root {
+  animation: fish-float 4.2s ease-in-out infinite;
+}
+
+.stage.mode-idle #body {
+  animation: fish-breathe 4.2s ease-in-out infinite;
+}
+
+.stage.mode-idle #tail {
+  animation: tail-sway 3.4s ease-in-out infinite;
+}
+
+.stage.mode-idle #fin-left {
+  animation: fin-wave 3.8s ease-in-out infinite;
+}
+
+.stage.mode-idle #fin-right {
+  animation: fin-wave 3.8s ease-in-out infinite reverse;
+}
+
+@keyframes fish-float {
+  0%,
+  100% {
+    transform: translateY(-7px);
+  }
+  50% {
+    transform: translateY(9px);
+  }
+}
+
+@keyframes fish-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.018);
+  }
+}
+
+@keyframes tail-sway {
+  0%,
+  100% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(9deg);
+  }
+}
+
+@keyframes fin-wave {
+  0%,
+  100% {
+    transform: rotate(-5deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+}
+
+/* hungry 饿了：瘪嘴 + 饿纹 + 没精神的慢速下沉漂浮 + 尾巴无力 */
+.stage.mode-hungry #fish-root {
+  animation: fish-float-droop 5.4s ease-in-out infinite;
+}
+
+.stage.mode-hungry #tail {
+  animation: tail-droop 4.6s ease-in-out infinite;
+}
+
+.stage.mode-hungry #fin-left,
+.stage.mode-hungry #fin-right {
+  animation: fin-droop 4.2s ease-in-out infinite;
+}
+
+/* 情绪符号挂在 mode-* 上，并用 :not() 排除"正在吃 / 正在开心 / 正在说话 / 正在被摸头"的
+   冲突场景，保证同一时刻不会出现两组表情符号（尤其不会出现两张嘴）叠加 */
+.stage.mode-hungry:not(.state-eat):not(.state-happy):not(.state-pet):not(.state-talking):not(.state-sleep) #mouth-pout {
+  opacity: 1;
+}
+
+.stage.mode-hungry:not(.state-eat):not(.state-happy):not(.state-pet):not(.state-sleep) #hungry-mark {
+  opacity: 1;
+}
+
+.stage.mode-hungry:not(.state-eat):not(.state-happy):not(.state-pet) #eyes-open {
+  animation: eyes-squint-slow 5.4s ease-in-out infinite;
+}
+
+.stage.mode-hungry #hungry-mark .growl {
+  animation: growl-wiggle 1.6s ease-in-out infinite;
+}
+
+.stage.mode-hungry #hungry-mark .gr2 {
+  animation-delay: 0.4s;
+}
+
+@keyframes fish-float-droop {
+  0%,
+  100% {
+    transform: translateY(10px) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(1px) rotate(1.5deg);
+  }
+}
+
+@keyframes tail-droop {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes fin-droop {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(2deg);
+  }
+}
+
+@keyframes growl-wiggle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateX(-2px) scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(2px) scale(1.04);
+  }
+}
+
+@keyframes eyes-squint-slow {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.86);
+  }
+}
+
+/* angry 生气：鼓腮瞪眼 + 怒火符号 + 小幅高频抖动 */
+.stage.mode-angry #fish-root {
+  animation: fish-angry-shake 1.5s ease-in-out infinite;
+}
+
+.stage.mode-angry #tail {
+  animation: tail-angry 420ms ease-in-out infinite;
+}
+
+.stage.mode-angry:not(.state-eat):not(.state-happy):not(.state-pet):not(.state-talking):not(.state-sleep) #mouth-pout {
+  opacity: 1;
+}
+
+.stage.mode-angry:not(.state-eat):not(.state-happy):not(.state-pet):not(.state-sleep) #brows {
+  opacity: 1;
+}
+
+.stage.mode-angry:not(.state-eat):not(.state-happy):not(.state-pet):not(.state-sleep) #angry-mark {
+  opacity: 1;
+}
+
+.stage.mode-angry:not(.state-eat):not(.state-happy):not(.state-pet) #eyes-open {
+  animation: eyes-narrow 1.2s ease-in-out infinite;
+}
+
+.stage.mode-angry #angry-mark .anger-line {
+  animation: anger-pulse 520ms ease-in-out infinite;
+}
+
+.stage.mode-angry #angry-mark .al2 {
+  animation-delay: 0.13s;
+}
+
+.stage.mode-angry #angry-mark .al3 {
+  animation-delay: 0.26s;
+}
+
+.stage.mode-angry #angry-mark .al4 {
+  animation-delay: 0.39s;
+}
+
+@keyframes fish-angry-shake {
+  0%,
+  100% {
+    transform: translate(0, 4px);
+  }
+  25% {
+    transform: translate(-4px, 1px);
+  }
+  50% {
+    transform: translate(0, -2px);
+  }
+  75% {
+    transform: translate(4px, 1px);
+  }
+}
+
+@keyframes tail-angry {
+  0%,
+  100% {
+    transform: rotate(-14deg);
+  }
+  50% {
+    transform: rotate(14deg);
+  }
+}
+
+@keyframes eyes-narrow {
+  0%,
+  100% {
+    transform: scaleY(0.72);
+  }
+  50% {
+    transform: scaleY(0.62);
+  }
+}
+
+@keyframes anger-pulse {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+/* sleep 睡觉：闭眼 + Zzz + 缓慢呼吸起伏（幅度比 idle 大、节奏更慢） */
+.stage.mode-sleep #fish-root {
+  animation: fish-sleep-breathe 5.6s ease-in-out infinite;
+}
+
+.stage.state-sleep #eyes-open {
+  opacity: 0;
+}
+
+.stage.state-sleep #eyes-closed,
+.stage.state-sleep #zzz {
+  opacity: 1;
+}
+
+.stage.state-sleep #mouth-smile {
+  opacity: 0.5;
+}
+
+.stage.mode-sleep #tail,
+.stage.mode-sleep #fin-left,
+.stage.mode-sleep #fin-right {
+  animation: fish-sleep-breathe 5.6s ease-in-out infinite;
+}
+
+.stage.state-sleep #zzz .z {
+  animation: zzz-float 3.2s ease-in-out infinite;
+}
+
+.stage.state-sleep #zzz .z2 {
+  animation-delay: 0.5s;
+}
+
+.stage.state-sleep #zzz .z3 {
+  animation-delay: 1s;
+}
+
+@keyframes fish-sleep-breathe {
+  0%,
+  100% {
+    transform: translateY(4px) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+@keyframes zzz-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 8px) scale(0.85);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -20px) scale(1.1);
+  }
+}
+
+/* ==========================================================================
+   动作层 state-*：15 个动作 + wake
+   规则：动作规则放在底座规则之后，需要时明确覆盖；每个动作只驱动它需要的元素。
+   ========================================================================== */
+
+/* blink 眨眼：极短地闭一下眼（随机会触发，睡觉时会被状态机拒绝） */
+.stage.state-blink #eyes-open {
+  opacity: 0;
+}
+
+.stage.state-blink #eyes-closed {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   greet 打招呼（启动 / 双击鱼身 / 托盘唤出）
+   挥右侧鱼鳍 + 身体小幅摆动 + 腮红
+   -------------------------------------------------------------------------- */
+.stage.state-greet #fish-action {
+  animation: fish-greet-bob 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 3;
+}
+
+.stage.state-greet #fin-right {
+  animation: fin-hi 260ms ease-in-out infinite;
+}
+
+.stage.state-greet #fin-left {
+  animation: fin-wave 900ms ease-in-out infinite;
+}
+
+.stage.state-greet #tail {
+  animation: tail-happy 300ms ease-in-out infinite;
+}
+
+.stage.state-greet #blush {
+  opacity: 1;
+}
+
+.stage.state-greet #mouth-smile {
+  animation: smile-open 700ms ease-in-out infinite;
+}
+
+@keyframes fish-greet-bob {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-12px) rotate(-3deg);
+  }
+  65% {
+    transform: translateY(-4px) rotate(3.5deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes fin-hi {
+  0%,
+  100% {
+    transform: rotate(-38deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes tail-happy {
+  0%,
+  100% {
+    transform: rotate(-12deg);
+  }
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes smile-open {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   pet 摸头（鼠标在鱼头上停留或来回滑动）
+   眯眼享受 + 头顶冒爱心 + 身体轻轻下沉
+   -------------------------------------------------------------------------- */
+.stage.state-pet #fish-action {
+  animation: fish-pet 1700ms ease-in-out infinite;
+}
+
+.stage.state-pet #eyes-open {
+  opacity: 0;
+}
+
+.stage.state-pet #eyes-smile,
+.stage.state-pet #heart {
+  opacity: 1;
+}
+
+.stage.state-pet #heart .heart {
+  animation: heart-float 1.7s ease-in-out infinite;
+}
+
+.stage.state-pet #heart .h2 {
+  animation-delay: 0.5s;
+}
+
+.stage.state-pet #blush {
+  opacity: 1;
+}
+
+.stage.state-pet #tail {
+  animation: tail-sway 1.4s ease-in-out infinite;
+}
+
+@keyframes fish-pet {
+  0%,
+  100% {
+    transform: translateY(-3px) scale(1.01, 0.99);
+  }
+  50% {
+    transform: translateY(4px) scale(0.99, 1.02);
+  }
+}
+
+@keyframes heart-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 6px) scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -22px) scale(1.05);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   poke 被戳（单击鱼身且没有拖拽）
+   惊吓弹跳 + 冒汗 + 瞪大眼，结束后回落到当前持久模式
+   -------------------------------------------------------------------------- */
+.stage.state-poke #fish-action {
+  animation: fish-startle 520ms cubic-bezier(0.22, 1.4, 0.5, 1);
+}
+
+.stage.state-poke #sweat {
+  animation: sweat-drop 900ms ease-in forwards;
+}
+
+.stage.state-poke #eyes-open {
+  animation: eyes-wide 520ms ease-out;
+}
+
+@keyframes fish-startle {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-16px) scale(1.05, 0.96);
+  }
+  55% {
+    transform: translateY(2px) scale(0.97, 1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sweat-drop {
+  0% {
+    opacity: 0;
+    transform: translate(0, -10px) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(4px, 22px) scale(0.85);
+  }
+}
+
+@keyframes eyes-wide {
+  0% {
+    transform: scale(0.85);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   dragged 被拖拽（左键按住并移动）
+   身体挣扎扭动 + 惊讶表情 + 汗滴
+   -------------------------------------------------------------------------- */
+.stage.state-dragged #fish-action {
+  animation: fish-struggle 460ms ease-in-out infinite;
+}
+
+.stage.state-dragged #eyes-open {
+  animation: eyes-wide 460ms ease-in-out infinite;
+}
+
+.stage.state-dragged #sweat {
+  opacity: 1;
+}
+
+.stage.state-dragged #tail {
+  animation: tail-angry 260ms ease-in-out infinite;
+}
+
+@keyframes fish-struggle {
+  0%,
+  100% {
+    transform: rotate(-6deg) translateY(-2px);
+  }
+  50% {
+    transform: rotate(6deg) translateY(2px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   eat 吃饭（菜单「喂饭」→ FEED 事件）
+   张嘴咀嚼 + 腮帮鼓动 + 米粒逐粒消失 + 小白碗弹出 + 最后满足眯眼
+   -------------------------------------------------------------------------- */
+.stage.state-eat #mouth-smile {
+  opacity: 0;
+}
+
+.stage.state-eat #mouth-pout {
+  opacity: 0;
+}
+
+.stage.state-eat #eyes-open {
+  animation: eat-eyes 3s ease-in-out forwards;
+}
+
+.stage.state-eat #eyes-smile {
+  animation: eat-satisfied 3s ease-in-out forwards;
+}
+
+.stage.state-eat #mouth-open {
+  animation: mouth-chew 300ms ease-in-out infinite;
+}
+
+.stage.state-eat #body {
+  animation: cheek-puff 300ms ease-in-out infinite;
+}
+
+.stage.state-eat #bowl {
+  animation: bowl-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.stage.state-eat #rice .rice {
+  animation: rice-vanish 550ms ease-in forwards;
+}
+
+.stage.state-eat #rice .rice:nth-child(2) {
+  animation-delay: 0.35s;
+}
+
+.stage.state-eat #rice .rice:nth-child(3) {
+  animation-delay: 0.7s;
+}
+
+.stage.state-eat #rice .rice:nth-child(4) {
+  animation-delay: 1.05s;
+}
+
+.stage.state-eat #rice .rice:nth-child(5) {
+  animation-delay: 1.4s;
+}
+
+.stage.state-eat #blush {
+  opacity: 1;
+}
+
+@keyframes mouth-chew {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scaleY(0.55);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.15);
+  }
+}
+
+@keyframes cheek-puff {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.022, 0.99);
+  }
+}
+
+@keyframes eat-eyes {
+  0%,
+  70% {
+    opacity: 1;
+    transform: scaleY(0.9);
+  }
+  85%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes eat-satisfied {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  85%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes bowl-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes rice-vanish {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   happy 开心（吃完 / 随机小动作）
+   原地转一圈 + 彩色泡泡 + 眯眼笑
+   -------------------------------------------------------------------------- */
+.stage.state-happy #fish-action {
+  animation: fish-spin 2.2s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.stage.state-happy #eyes-open {
+  opacity: 0;
+}
+
+.stage.state-happy #eyes-smile,
+.stage.state-happy #happy-bubbles {
+  opacity: 1;
+}
+
+.stage.state-happy #happy-bubbles .bubble {
+  animation: bubble-rise 2.2s ease-out infinite;
+}
+
+.stage.state-happy #happy-bubbles .b2 {
+  animation-delay: 0.25s;
+}
+
+.stage.state-happy #happy-bubbles .b3 {
+  animation-delay: 0.5s;
+}
+
+.stage.state-happy #happy-bubbles .b4 {
+  animation-delay: 0.75s;
+}
+
+.stage.state-happy #happy-bubbles .b5 {
+  animation-delay: 1s;
+}
+
+.stage.state-happy #blush {
+  opacity: 1;
+}
+
+.stage.state-happy #tail {
+  animation: tail-happy 220ms ease-in-out infinite;
+}
+
+@keyframes fish-spin {
+  0% {
+    transform: rotate(0deg) translateY(0) scale(1);
+  }
+  25% {
+    transform: rotate(90deg) translateY(-14px) scale(1.04);
+  }
+  50% {
+    transform: rotate(180deg) translateY(-6px) scale(1.02);
+  }
+  75% {
+    transform: rotate(270deg) translateY(-14px) scale(1.04);
+  }
+  100% {
+    transform: rotate(360deg) translateY(0) scale(1);
+  }
+}
+
+@keyframes bubble-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 14px) scale(0.6);
+  }
+  30% {
+    opacity: 0.95;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(10px, -34px) scale(1.15);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   flip 翻肚皮（随机调皮动作）
+   原地翻个身，再翻回来
+   -------------------------------------------------------------------------- */
+.stage.state-flip #fish-action {
+  animation: fish-flip 1.8s cubic-bezier(0.5, 0, 0.5, 1);
+}
+
+.stage.state-flip #eyes-open {
+  animation: eyes-wide 600ms ease-in-out infinite;
+}
+
+.stage.state-flip #tail {
+  animation: tail-angry 300ms ease-in-out infinite;
+}
+
+@keyframes fish-flip {
+  0% {
+    transform: rotate(0deg) translateY(0);
+  }
+  35% {
+    transform: rotate(170deg) translateY(-10px);
+  }
+  50% {
+    transform: rotate(180deg) translateY(-6px);
+  }
+  65% {
+    transform: rotate(190deg) translateY(-10px);
+  }
+  100% {
+    transform: rotate(360deg) translateY(0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   talking 说话（阶段 2 只做口型接口，等 TTS 接入后由真实语音驱动）
+   嘴巴一张一合 + 轻微上下摆动；不发声、不显示任何文字
+   -------------------------------------------------------------------------- */
+.stage.state-talking #mouth-smile {
+  opacity: 0;
+}
+
+.stage.state-talking #mouth-open {
+  animation: talking-mouth 240ms steps(1, end) infinite;
+}
+
+.stage.state-talking #fish-action {
+  animation: fish-talk-bob 620ms ease-in-out infinite;
+}
+
+@keyframes talking-mouth {
+  0% {
+    opacity: 1;
+    transform: scaleY(0.45);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.25);
+  }
+  100% {
+    opacity: 0.35;
+    transform: scaleY(0.5);
+  }
+}
+
+@keyframes fish-talk-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   thinking 发呆思考（随机小动作）
+   歪头 + 头顶冒问号与旋转泡泡
+   -------------------------------------------------------------------------- */
+.stage.state-thinking #fish-action {
+  animation: fish-think 2.4s ease-in-out infinite;
+}
+
+.stage.state-thinking #think {
+  opacity: 1;
+}
+
+.stage.state-thinking #think .think-mark {
+  animation: question-bob 1.4s ease-in-out infinite;
+}
+
+.stage.state-thinking #think .think-bubble {
+  animation: bubble-rise 2.4s ease-out infinite;
+}
+
+.stage.state-thinking #think .tb2 {
+  animation-delay: 0.5s;
+}
+
+.stage.state-thinking #mouth-smile {
+  opacity: 0.7;
+}
+
+@keyframes fish-think {
+  0%,
+  100% {
+    transform: rotate(-4deg) translateY(0);
+  }
+  50% {
+    transform: rotate(5deg) translateY(-5px);
+  }
+}
+
+@keyframes question-bob {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: translateY(3px) scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.06);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   run 跑步（原 swim 游动；2026-10-05 起小蓝改为满地跑）
+   窗口位置由主进程动画（含迈步弹跳），渲染层负责跑步起伏 + 朝向的前倾 + 脚下扬尘
+   -------------------------------------------------------------------------- */
+.stage.state-swim #swim-trail {
+  opacity: 1;
+}
+
+.stage.state-swim #swim-trail .trail {
+  animation: dust-drift 0.72s ease-out infinite;
+}
+
+/* 尾气：脚后方更大团的灰白气，慢半拍向后上飘、边飘边散（跑步很努力的呼哧感） */
+.stage.state-swim #swim-trail .exhaust {
+  animation: exhaust-drift 1.1s ease-out infinite;
+}
+
+.stage.state-swim #swim-trail .e2 {
+  animation-delay: 0.36s;
+}
+
+.stage.state-swim #swim-trail .e3 {
+  animation-delay: 0.72s;
+}
+
+.stage.state-swim #swim-trail .t2 {
+  animation-delay: 0.18s;
+}
+
+.stage.state-swim #swim-trail .t3 {
+  animation-delay: 0.36s;
+}
+
+.stage.state-swim #swim-trail .t4 {
+  animation-delay: 0.54s;
+}
+
+/* 往右跑时扬尘在左（默认方向）；往左跑时整组扬尘水平镜像到右侧 */
+.stage.state-swim.swim-left #swim-trail {
+  transform: scaleX(-1);
+}
+
+/* 跑步动作：迈步弹跳 + 朝运动方向前倾（与主进程窗口的步频弹跳叠成完整跑姿）。
+   关键：transform-origin 放在脚底（50% 94%），压扁像踩在地上，腾空拉长像蹬地发力；
+   步频 0.5s 与主进程 SWIM_BOUNCE_CYCLES=6（3000ms/6≈500ms）严格同步（用户反馈放慢）。 */
+.stage.state-swim.swim-right #fish-svg #pet-image {
+  transform-origin: 50% 94%;
+  animation: girl-run-right 0.5s ease-in-out infinite;
+}
+
+.stage.state-swim.swim-left #fish-svg #pet-image {
+  transform-origin: 50% 94%;
+  animation: girl-run-left 0.5s ease-in-out infinite;
+}
+
+@keyframes girl-run-right {
+  0%,
+  100% {
+    /* 着地：压扁蓄力 */
+    transform: translateY(0) rotate(5deg) scale(1.05, 0.94);
+  }
+  35% {
+    /* 蹬地腾空：拉长 + 前倾到最大 */
+    transform: translateY(-13px) rotate(10deg) scale(0.96, 1.06);
+  }
+  65% {
+    /* 腾空后段：收步 */
+    transform: translateY(-4px) rotate(7deg) scale(1, 1);
+  }
+  85% {
+    /* 即将着地：再次压扁 */
+    transform: translateY(1px) rotate(4deg) scale(1.05, 0.94);
+  }
+}
+
+@keyframes girl-run-left {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-5deg) scale(1.05, 0.94);
+  }
+  35% {
+    transform: translateY(-13px) rotate(-10deg) scale(0.96, 1.06);
+  }
+  65% {
+    transform: translateY(-4px) rotate(-7deg) scale(1, 1);
+  }
+  85% {
+    transform: translateY(1px) rotate(-4deg) scale(1.05, 0.94);
+  }
+}
+
+@keyframes dust-drift {
+  0% {
+    opacity: 0;
+    transform: translate(6px, 2px) scale(0.5);
+  }
+  30% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-20px, -8px) scale(1.25);
+  }
+}
+
+@keyframes exhaust-drift {
+  0% {
+    opacity: 0;
+    transform: translate(10px, 4px) scale(0.45);
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-34px, -18px) scale(1.5);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   wake 叫醒（菜单「叫醒」）
+   眼睛由闭到睁 + 轻轻伸展一下；持久模式由上层切回当前情绪
+   -------------------------------------------------------------------------- */
+.stage.state-wake #fish-action {
+  animation: fish-wake 900ms ease-out;
+}
+
+.stage.state-wake #eyes-open {
+  animation: eyes-wide 600ms ease-out;
+}
+
+@keyframes fish-wake {
+  0% {
+    transform: scale(1.04, 0.94);
+  }
+  40% {
+    transform: scale(0.97, 1.05) translateY(-8px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   hungry / angry 作为"可见状态"类也各自提供一眼可辨的姿态
+   （持久模式 → 底座动画在 mode-*，这里补充状态符号，保证两个类都真的有用）
+   -------------------------------------------------------------------------- */
+.stage.state-hungry #hungry-mark,
+.stage.state-hungry #mouth-pout {
+  opacity: 1;
+}
+
+.stage.state-angry #angry-mark,
+.stage.state-angry #brows,
+.stage.state-angry #mouth-pout {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   无障碍：系统里关闭动画时只保留静态姿态
+   （blink / sleep 的闭眼等是静态 opacity 规则，不受影响）
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  #fish-svg * {
+    animation: none !important;
+  }
+
+  /* 关掉动画后，这几个"结果姿态"是靠 animation-fill-mode 才显示出来的，
+     必须改成静态样式，否则用户会看不到任何反馈（等于状态没有表现）。 */
+  .stage.state-eat #bowl {
+    opacity: 1;
+    transform: none;
+  }
+
+  .stage.state-eat #eyes-smile {
+    opacity: 1;
+  }
+
+  .stage.state-eat #rice .rice {
+    opacity: 0.3;
+  }
+
+  .stage.state-poke #sweat {
+    opacity: 1;
+  }
+
+  /* 字幕气泡的淡入淡出在省电模式下也要保留可读性（不做动画，直接显示） */
+  .bubble:not(.bubble-hidden) {
+    transform: translateX(-50%);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   阶段 4：字幕 / 错误状态气泡
+   --------------------------------------------------------------------------
+   设计约束（逐条对应需求）：
+     1. **默认不可见**：`.bubble-hidden` 用 display:none 彻底隐藏。
+        需求要求"回复默认只通过语音说出，文字气泡只在字幕模式下显示"；
+        只有两类内容允许默认显示 —— 错误提示与麦克风状态提示。
+     2. 内容与语音同源：文字全部来自 renderer.js 的 showCaption()，
+        与 TTS 播放的那一段文本一字不差（同一份字符串，不做二次加工）。
+     3. 轻量：只有一块圆角小气泡 + 一次淡入，没有模态、没有按钮、不会阻塞点击
+        （pointer-events: none，绝不挡住桌面操作）。
+     4. 位置在鱼头顶上方居中，不会和 SVG 里的情绪符号抢位置。
+   -------------------------------------------------------------------------- */
+
+.bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 88%;
+  transform: translateX(-50%);
+  max-width: 88%;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(8, 40, 66, 0.92);
+  border: 1px solid rgba(141, 196, 228, 0.55);
+  box-shadow: 0 4px 12px rgba(3, 20, 34, 0.35);
+  color: #e8f5ff;
+  font-size: 13px;
+  line-height: 1.35;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  z-index: 5;
+  animation: bubble-in 160ms ease-out;
+}
+
+/* 小尖角，指向鱼头 */
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(8, 40, 66, 0.92);
+}
+
+/* 字幕：语音播报期间显示，内容与语音一致 */
+.bubble.bubble-caption {
+  background: rgba(8, 40, 66, 0.92);
+}
+
+/* 状态提示：麦克风开 / 关这类信息 */
+.bubble.bubble-info {
+  border-color: rgba(141, 196, 228, 0.45);
+}
+
+/* 警告：没配 Key、麦克风被拒 */
+.bubble.bubble-warn {
+  background: rgba(80, 58, 12, 0.94);
+  border-color: rgba(240, 200, 96, 0.6);
+  color: #fff6de;
+}
+
+.bubble.bubble-warn::after {
+  border-top-color: rgba(80, 58, 12, 0.94);
+}
+
+/* 错误：网络 / 识别失败 */
+.bubble.bubble-error {
+  background: rgba(92, 26, 32, 0.94);
+  border-color: rgba(255, 156, 156, 0.6);
+  color: #ffecec;
+}
+
+.bubble.bubble-error::after {
+  border-top-color: rgba(92, 26, 32, 0.94);
+}
+
+/* 休眠：彻底隐藏（不是 opacity:0，避免读屏与命中测试仍把它当可见内容） */
+.bubble.bubble-hidden {
+  display: none;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ==========================================================================
+   人物形象（pet-girl）专属动画层（2026-10-05 形象替换后新增）
+   原则：底座/动作层动画照旧驱动整体，这里只给静态人物图叠加"生命感"微动画，
+   不与 fish-root / fish-action 抢同一个 transform（作用在不同元素上）。
+   ========================================================================== */
+
+/* 微动画基准：围绕人物脚部附近摆动，像重心在脚下 */
+#fish-svg #pet-image {
+  transform-box: fill-box;
+  transform-origin: 50% 88%;
+  will-change: transform;
+}
+
+/* idle：极轻微的左右摇曳（叠加在底座漂浮之上，像在哼歌） */
+.stage.mode-idle #fish-svg #pet-image {
+  animation: girl-sway 6.4s ease-in-out infinite;
+}
+
+@keyframes girl-sway {
+  0%,
+  100% {
+    transform: rotate(-1.4deg);
+  }
+  50% {
+    transform: rotate(1.4deg);
+  }
+}
+
+/* hungry：蔫蔫地晃 + 往下坠一点 */
+.stage.mode-hungry #fish-svg #pet-image {
+  animation: girl-wilt 3.6s ease-in-out infinite;
+}
+
+@keyframes girl-wilt {
+  0%,
+  100% {
+    transform: rotate(-2.2deg) translateY(1.5px);
+  }
+  50% {
+    transform: rotate(2.2deg) translateY(3px);
+  }
+}
+
+/* talking：说话时跟着语音节奏轻轻点头/起伏 */
+.stage.state-talking #fish-svg #pet-image {
+  animation: girl-bob 0.55s ease-in-out infinite;
+}
+
+@keyframes girl-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3.5px) scale(1.008);
+  }
+}
+
+/* thinking：歪头思考 */
+.stage.state-thinking #fish-svg #pet-image {
+  animation: girl-tilt 2.8s ease-in-out infinite;
+}
+
+@keyframes girl-tilt {
+  0%,
+  100% {
+    transform: rotate(-2.6deg);
+  }
+  50% {
+    transform: rotate(2.6deg);
+  }
+}
+
+/* sleep：与底座呼吸错开半拍的慢起伏（更困的感觉） */
+.stage.mode-sleep #fish-svg #pet-image {
+  animation: girl-sleep-breathe 5.2s ease-in-out infinite;
+}
+
+@keyframes girl-sleep-breathe {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    transform: scale(1.012, 0.988) translateY(1.5px);
+  }
+}
+
+/* 眨眼覆盖层已整体移除（2026-10-05 按用户要求）：
+   脸上"黑点"的来源就是这层眼睑覆盖，反复修正仍被看成黑点，故弃用。
+   .state-blink 仍保留一条惰性规则（状态机的 blink 状态还能被触发，但不再画任何东西）。 */
+.stage.state-blink #fish-svg #pet-image {
+  animation: none;
+}
+
+/* ==========================================================================
+   表情/交互扩充配套动画（2026-10-05 第二批）
+   ========================================================================== */
+
+/* poke（戳脸/戳身体）：被戳得猛地一弹，连续晃两下才站稳 */
+.stage.state-poke #fish-svg #pet-image {
+  animation: girl-jolt 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+}
+
+@keyframes girl-jolt {
+  0% {
+    transform: translateX(0) rotate(0deg) scale(1);
+  }
+  18% {
+    transform: translateX(-16px) rotate(-10deg) scale(1.06, 0.94);
+  }
+  40% {
+    transform: translateX(10px) rotate(6deg) scale(0.96, 1.05);
+  }
+  62% {
+    transform: translateX(-6px) rotate(-3.5deg) scale(1.02, 0.98);
+  }
+  82% {
+    transform: translateX(3px) rotate(1.5deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg) scale(1);
+  }
+}
+
+/* happy（咯吱肚子/被夸）：开心地原地蹦跳 */
+.stage.state-happy #fish-svg #pet-image {
+  animation: girl-hop 0.62s ease-in-out infinite;
+}
+
+@keyframes girl-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  12% {
+    transform: translateY(0) scale(1.06, 0.9);
+  }
+  30% {
+    transform: translateY(-22px) scale(0.94, 1.08);
+  }
+  52% {
+    transform: translateY(0) scale(1.08, 0.88);
+  }
+  68% {
+    transform: translateY(-10px) scale(0.97, 1.04);
+  }
+  84% {
+    transform: translateY(0) scale(1.04, 0.95);
+  }
+}
+
+/* pet（摸头）：害羞地左右扭捏，肩膀缩一点 */
+.stage.state-pet #fish-svg #pet-image {
+  animation: girl-shy-wiggle 1.1s ease-in-out infinite;
+}
+
+@keyframes girl-shy-wiggle {
+  0%,
+  100% {
+    transform: rotate(-5.5deg) scale(0.965, 1.02);
+  }
+  50% {
+    transform: rotate(5.5deg) scale(1.02, 0.975);
+  }
+}
+
+/* greet（双击打招呼）：轻快地踮脚两下 */
+.stage.state-greet #fish-svg #pet-image {
+  animation: girl-greet-bounce 1.05s ease-in-out infinite;
+}
+
+@keyframes girl-greet-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  20% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  38% {
+    transform: translateY(-16px) scale(0.95, 1.06);
+  }
+  52% {
+    transform: translateY(0) scale(1.07, 0.9);
+  }
+  68% {
+    transform: translateY(-14px) scale(0.96, 1.05);
+  }
+  84% {
+    transform: translateY(0) scale(1.03, 0.97);
+  }
+}
+
+/* eat（吃饭）：满足地小幅度点头嚼 */
+.stage.state-eat #fish-svg #pet-image {
+  animation: girl-chew 0.8s ease-in-out infinite;
+}
+
+@keyframes girl-chew {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(1.5px) rotate(0.8deg);
+  }
+}
+
+/* ==========================================================================
+   点击打击特效（2026-10-05）：点她哪里，哪里就炸开一圈星星光环
+   默认整组由 SVG 的 opacity="0" 属性隐藏；.pop 由 JS 在点击时挂上再摘下
+   ========================================================================== */
+#fish-svg #tap-fx {
+  pointer-events: none;
+}
+
+#fish-svg #tap-fx.pop {
+  animation: tap-fade 0.5s ease-out forwards;
+}
+
+#fish-svg #tap-fx.pop .fx-burst {
+  animation: tap-pop 0.5s cubic-bezier(0.2, 1.3, 0.45, 1) forwards;
+}
+
+@keyframes tap-fade {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tap-pop {
+  0% {
+    transform: scale(0.3) rotate(-12deg);
+  }
+  55% {
+    transform: scale(1.25) rotate(4deg);
+  }
+  100% {
+    transform: scale(1.6) rotate(8deg);
+  }
+}
+
+/* dragged（被拖拽）：人物图层跟着一起挣扎扭动（原来只有旧鱼图层在扭） */
+.stage.state-dragged #fish-svg #pet-image {
+  animation: girl-wriggle 0.42s ease-in-out infinite;
+}
+
+@keyframes girl-wriggle {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(-3px) scale(1.03, 0.96);
+  }
+  50% {
+    transform: rotate(8deg) translateY(3px) scale(0.97, 1.04);
+  }
+}
