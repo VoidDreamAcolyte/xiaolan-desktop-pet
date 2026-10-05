@@ -1671,3 +1671,33 @@ body {
     transform: scaleY(1.15) scaleX(0.94);
   }
 }
+
+/* --------------------------------------------------------------------------
+   dragged 四肢慌乱摆动（漫画挥舞线）：手脚两侧的弧线快速交替摆动
+   -------------------------------------------------------------------------- */
+.stage.state-dragged #flail {
+  opacity: 1;
+}
+
+#fish-svg #flail .flail-limb {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: flail-swing 0.26s ease-in-out infinite;
+}
+
+#fish-svg #flail .fl-2,
+#fish-svg #flail .fl-4 {
+  animation-delay: -0.13s;
+}
+
+@keyframes flail-swing {
+  0%,
+  100% {
+    transform: rotate(-26deg) scale(0.92);
+    opacity: 0.75;
+  }
+  50% {
+    transform: rotate(26deg) scale(1.06);
+    opacity: 1;
+  }
+}
